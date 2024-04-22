@@ -1,12 +1,28 @@
 from ultralytics import YOLO
 import cv2
 import numpy as np
+import os
 
 # Загрузка предварительно обученной модели YOLO
 model = YOLO('yolov8l.pt')
 
+video_path = input("Введите путь к видеофайлу: ")
+
+# Проверка существования указанного файла
+if not os.path.exists(video_path):
+    print("Указанный файл не найден.")
+    exit()
+
+class_name = input("Введите имя класса объекта: ")
+
+# Получение номера класса
+try:
+    class_number = next(key for key, value in model.names.items() if value == class_name)
+except StopIteration:
+    print("Указанный класс не найден.")
+    exit()
+
 # Открытие видеофайла
-video_path = "resources/1.mp4"
 cap = cv2.VideoCapture(video_path)
 
 # Получение ширины и высоты кадра из видео
@@ -26,17 +42,21 @@ while cap.isOpened():
 
     if success:
         # Запуск трекинга YOLOv8 на кадре
-        results = model.track(source=frame, save=True, conf=0.65, iou=0.5, classes=15)
+        results = model.track(source=frame, conf=0.65, iou=0.5, classes=class_number)
 
         if results[0].boxes.cls.numel() > 0:
             # Визуализируем результаты на кадре с указанными параметрами
-            annotated_frame = results[0].plot(line_width=4, font_size=4)
+            annotated_frame = results[0].plot()
 
             # Извлекаем координаты ограничительных рамок обнаруженных объектов
             bboxes = results[0].boxes.xyxy.cpu().numpy()
 
             # Добавляем место для текста аннотаций
-            bboxes[:, :4] += [0, -33, 0, 0]
+            bboxes[:, :4] += [0, -50, 50, 0]
+
+            # Убедимся, что координаты остаются в пределах размеров изображения
+            bboxes[:, :2] = np.maximum(bboxes[:, :2], 0)  # левый верхний угол
+            bboxes[:, 2:] = np.minimum(bboxes[:, 2:], frame.shape[:2][::-1])  # правый нижний угол
 
             # Создаем новый пустой кадр
             new_frame = np.zeros((frame.shape), dtype='uint8')
@@ -47,9 +67,6 @@ while cap.isOpened():
                 # Вырезаем область из аннотированного кадра
                 cropped_region = annotated_frame[y1:y2, x1:x2]
 
-                # Заменяем верхнюю половину границы нулями
-                cropped_region[:35, 280:] = 0
-
                 # Обновляем новый кадр вырезанной областью
                 new_frame[y1:y2, x1:x2] = cropped_region
 
@@ -59,9 +76,8 @@ while cap.isOpened():
         # Прерывание цикла при достижении конца видео
         break
 
-# Освобождение объекта захвата видео и закрытие окон отображения
+# Освобождение ресурсов
 cap.release()
 output.release()
-cv2.destroyAllWindows()
 
 print(f"Видео успешно сохранено в {output_path}")
