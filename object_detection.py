@@ -51,13 +51,6 @@ while cap.isOpened():
             # Извлекаем координаты ограничительных рамок обнаруженных объектов
             bboxes = results[0].boxes.xyxy.cpu().numpy()
 
-            # Добавляем место для текста аннотаций
-            bboxes[:, :4] += [0, -50, 50, 0]
-
-            # Убедимся, что координаты остаются в пределах размеров изображения
-            bboxes[:, :2] = np.maximum(bboxes[:, :2], 0)  # левый верхний угол
-            bboxes[:, 2:] = np.minimum(bboxes[:, 2:], frame.shape[:2][::-1])  # правый нижний угол
-
             # Создаем новый пустой кадр
             new_frame = np.zeros((frame.shape), dtype='uint8')
 
@@ -70,8 +63,16 @@ while cap.isOpened():
                 # Обновляем новый кадр вырезанной областью
                 new_frame[y1:y2, x1:x2] = cropped_region
 
+            # Вычитание одного кадра из другого для получения разницы
+            frame_diff = frame - annotated_frame
+
+            # Оставляем значения из annotated_frame, где есть разница с frame
+            frame_diff[frame_diff != 0] = annotated_frame[frame_diff != 0]
+
+            result_frame = cv2.add(new_frame, frame_diff)
+
             # Записываем новый кадр в выходное видео
-            output.write(new_frame)
+            output.write(result_frame)
     else:
         # Прерывание цикла при достижении конца видео
         break
